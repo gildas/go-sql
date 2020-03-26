@@ -38,6 +38,9 @@ func (queries Queries) Add(key string, values ...interface{}) Queries {
 	if len(values) == 0 {
 		return queries
 	}
+	if set, ok := values[0].(QueryOperator); ok && set.Operator == QuerySet.Operator {
+		key = "=" + key
+	}
 	if current, found := queries[key]; found {
 		if len(current) == 2 {
 			current[0] = QueryIn
@@ -70,7 +73,8 @@ func (queries Queries) WhereClause() (string, []interface{}) {
 			}
 			clause.WriteString(fmt.Sprintf(" AND %s %s (%s)", column, operator, strings.Join(args, ", ")))
 		} else {
-			if len(values) != operator.Arity { // ignore wrong # of arguments
+			if len(values) != operator.Arity || operator.Operator == QuerySet.Operator {
+				// ignore wrong # of arguments or SET Operator (used by UpdateStatement)
 				continue
 			}
 			parms = append(parms, values[1])

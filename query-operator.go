@@ -18,6 +18,7 @@ var (
 	QueryLesser         = QueryOperator{"<", 2}
 	QueryLesserOrEqual  = QueryOperator{"<=", 2}
 	QueryLike           = QueryOperator{"LIKE", 2}
+	QuerySet            = QueryOperator{"SET", 2}
 )
 
 // String returns a string representation of the operator
