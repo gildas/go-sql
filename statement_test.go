@@ -17,7 +17,6 @@ type StatementSuite struct {
 	Name   string
 	Logger *logger.Logger
 	Start  time.Time
-	DB     *sql.DB
 }
 
 func TestStatementSuite(t *testing.T) {
@@ -26,7 +25,7 @@ func TestStatementSuite(t *testing.T) {
 
 func (suite *StatementSuite) TestCanBuildDelete() {
 	queries := sql.Queries{}.Add("id", "abcd1235").Add("age", sql.QueryGreater, 18)
-	statement := sql.DeleteStatement{}.With(suite.DB)
+	statement := sql.DeleteStatement{}
 	suite.Require().NotNil(statement)
 	stmt, parms := statement.Build("person", nil, queries)
 	suite.Assert().NotEmpty(stmt)
@@ -35,7 +34,7 @@ func (suite *StatementSuite) TestCanBuildDelete() {
 }
 
 func (suite *StatementSuite) TestCanBuildDeleteAll() {
-	statement := sql.DeleteStatement{}.With(suite.DB)
+	statement := sql.DeleteStatement{}
 	suite.Require().NotNil(statement)
 	stmt, parms := statement.Build("person", nil, sql.Queries{})
 	suite.Assert().NotEmpty(stmt)
@@ -46,7 +45,7 @@ func (suite *StatementSuite) TestCanBuildDeleteAll() {
 
 func (suite *StatementSuite) TestCanBuildInsert() {
 	queries := sql.Queries{}.Add("id", "abcd1235").Add("age", 18)
-	statement := sql.InsertStatement{}.With(suite.DB)
+	statement := sql.InsertStatement{}
 	suite.Require().NotNil(statement)
 	stmt, parms := statement.Build("person", nil, queries)
 	suite.Assert().NotEmpty(stmt)
@@ -57,7 +56,7 @@ func (suite *StatementSuite) TestCanBuildInsert() {
 func (suite *StatementSuite) TestCanBuildSelect() {
 	columns := []string{"id", "name", "age"}
 	queries := sql.Queries{}.Add("id", "abcd1235").Add("age", sql.QueryGreater, 18)
-	statement := sql.SelectStatement{}.With(suite.DB)
+	statement := sql.SelectStatement{}
 	suite.Require().NotNil(statement)
 	stmt, parms := statement.Build("person", columns, queries)
 	suite.Assert().NotEmpty(stmt)
@@ -67,7 +66,7 @@ func (suite *StatementSuite) TestCanBuildSelect() {
 
 func (suite *StatementSuite) TestCanBuildSelectAll() {
 	columns := []string{"id", "name", "age"}
-	statement := sql.SelectStatement{}.With(suite.DB)
+	statement := sql.SelectStatement{}
 	suite.Require().NotNil(statement)
 	stmt, parms := statement.Build("person", columns, sql.Queries{})
 	suite.Assert().NotEmpty(stmt)
@@ -77,7 +76,7 @@ func (suite *StatementSuite) TestCanBuildSelectAll() {
 
 func (suite *StatementSuite) TestCanBuildUpdate() {
 	queries := sql.Queries{}.Add("id", "abcd1235").Add("age", sql.QueryGreater, 18).Add("age", sql.QuerySet, 25)
-	statement := sql.UpdateStatement{}.With(suite.DB)
+	statement := sql.UpdateStatement{}
 	suite.Require().NotNil(statement)
 	stmt, parms := statement.Build("person", nil, queries)
 	suite.Assert().NotEmpty(stmt)
@@ -87,7 +86,7 @@ func (suite *StatementSuite) TestCanBuildUpdate() {
 
 func (suite *StatementSuite) TestCannotBuildUpdateWithEmptyQueries() {
 	queries := sql.Queries{}.Add("age", sql.QuerySet, 25)
-	statement := sql.UpdateStatement{}.With(suite.DB)
+	statement := sql.UpdateStatement{}
 	suite.Require().NotNil(statement)
 	stmt, parms := statement.Build("person", nil, queries)
 	suite.Assert().Empty(stmt)
@@ -108,7 +107,6 @@ func (suite *StatementSuite) SetupSuite() {
 		},
 	).Child("test", "test")
 	suite.Logger.Infof("Suite Start: %s %s", suite.Name, strings.Repeat("=", 80-14-len(suite.Name)))
-	suite.DB, err = sql.Open("sqlite3", "", suite.Logger)
 	suite.Assert().Nil(err)
 }
 
@@ -119,8 +117,6 @@ func (suite *StatementSuite) TearDownSuite() {
 	} else {
 		suite.Logger.Infof("All tests succeeded, we are cleaning")
 	}
-	err := suite.DB.Close()
-	suite.Assert().Nil(err, "Failed to close the database")
 	suite.Logger.Infof("Suite End: %s %s", suite.Name, strings.Repeat("=", 80-12-len(suite.Name)))
 }
 
