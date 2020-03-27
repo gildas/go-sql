@@ -43,6 +43,42 @@ func (db DB) Ping() error {
 	return db.db.Ping()
 }
 
+// Exec executes a query without returning any rows. The args are for any placeholder parameters in the query
+func (db *DB) Exec(query string, args ...interface{}) (gosql.Result, error) {
+	return db.db.Exec(query, args...)
+}
+
+// Exec executes a query without returning any rows. The args are for any placeholder parameters in the query
+func (db *DB) ExecContext(ctx context.Context, query string, args ...interface{}) (gosql.Result, error) {
+	return db.db.ExecContext(ctx, query, args...)
+}
+
+// Query executes a query that returns rows, typically a SELECT. The args are for any placeholder parameters in the query
+func (db *DB) Query(query string, args ...interface{}) (*gosql.Rows, error) {
+	return db.db.Query(query, args...)
+}
+
+// Query executes a query that returns rows, typically a SELECT. The args are for any placeholder parameters in the query
+func (db *DB) QueryContext(ctx context.Context, query string, args ...interface{}) (*gosql.Rows, error) {
+	return db.db.QueryContext(ctx, query, args...)
+}
+
+// QueryRow executes a query that is expected to return at most one row.
+// QueryRow always returns a non-nil value. Errors are deferred until Row's Scan method is called.
+// If the query selects no rows, the *Row's Scan will return ErrNoRows.
+// Otherwise, the *Row's Scan scans the first selected row and discards the rest
+func (db *DB) QueryRow(query string, args ...interface{}) *gosql.Row {
+	return db.db.QueryRow(query, args...)
+}
+
+// QueryRowContext executes a query that is expected to return at most one row.
+// QueryRowContext always returns a non-nil value. Errors are deferred until Row's Scan method is called.
+// If the query selects no rows, the *Row's Scan will return ErrNoRows.
+// Otherwise, the *Row's Scan scans the first selected row and discards the rest
+func (db *DB) QueryRowContext(ctx context.Context, query string, args ...interface{}) *gosql.Row {
+	return db.db.QueryRowContext(ctx, query, args...)
+}
+
 // Close closes the database and prevents new queries from starting.
 // Close then waits for all queries that have started processing on the server to finish.
 //

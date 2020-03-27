@@ -47,6 +47,48 @@ func (suite *DBSuite) TestCanPing() {
 	suite.Assert().Nil(err, "Failed to close the database")
 }
 
+func (suite *DBSuite) TestCanExecAndQuery() {
+	db, err := sql.Open("ramsql", "TEST", suite.Logger)
+	suite.Assert().Nil(err)
+	suite.Assert().NotNil(db)
+
+	suite.Logger.Infof("Creating test Table")
+	_, err = db.Exec(`CREATE TABLE account (id TEXT, email TEXT)`)
+	suite.Assert().Nil(err, "Failed to execute statement")
+	suite.Logger.Infof("Inserting data into the test Table")
+	_, err = db.Exec(`INSERT INTO account (id, email) VALUES ($1, $2)`, "1234", "text")
+	suite.Assert().Nil(err, "Failed to execute statement")
+	suite.Logger.Infof("Searching for data in the test Table")
+	_, err = db.Query(`SELECT * FROM account WHERE id = $1`, "1234")
+	suite.Assert().Nil(err, "Failed to query")
+	_ = db.QueryRow(`SELECT * FROM account WHERE id = $1`, "1234")
+	suite.Assert().Nil(err, "Failed to query")
+	suite.Logger.Infof("Dropping the test Table")
+	_, err = db.Exec(`DROP TABLE account`)
+	suite.Assert().Nil(err, "Failed to execute statement")
+	err = db.Close()
+	suite.Assert().Nil(err, "Failed to close the database")
+}
+
+func (suite *DBSuite) TestCanExecAndQueryWithContext() {
+	db, err := sql.Open("ramsql", "TEST", suite.Logger)
+	suite.Assert().Nil(err)
+	suite.Assert().NotNil(db)
+
+	_, err = db.ExecContext(context.Background(), `CREATE TABLE account (id TEXT, email TEXT)`)
+	suite.Assert().Nil(err, "Failed to execute statement")
+	_, err = db.ExecContext(context.Background(), `INSERT INTO account (id, email) VALUES ($1, $2)`, "1234", "text")
+	suite.Assert().Nil(err, "Failed to execute statement")
+	_, err = db.QueryContext(context.Background(), `SELECT * FROM account WHERE id = $1`, "1234")
+	suite.Assert().Nil(err, "Failed to query")
+	_ = db.QueryRowContext(context.Background(), `SELECT * FROM account WHERE id = $1`, "1234")
+	suite.Assert().Nil(err, "Failed to query")
+	_, err = db.ExecContext(context.Background(), `DROP TABLE account`)
+	suite.Assert().Nil(err, "Failed to execute statement")
+	err = db.Close()
+	suite.Assert().Nil(err, "Failed to close the database")
+}
+
 func (suite *DBSuite) TestCanStoreAndRetrieveInContext() {
 	db, err := sql.Open("ramsql", "", suite.Logger)
 	suite.Assert().Nil(err)
