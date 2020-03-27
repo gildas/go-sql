@@ -96,5 +96,5 @@ You can also use the Statement level of using the Database:
 		statement, parms = sqlDeleteStatement{}.With(db).Build("person", nil, sql.Queries{}.Add("age", sql.Greater, 50))
 		_, err := db.Exec(statement, parms...)
 	}
-
 */
+package sql

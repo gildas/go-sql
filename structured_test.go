@@ -47,7 +47,7 @@ func (suite *StructuredSuite) TestCanCreate() {
 }
 
 func (suite *StructuredSuite) TestCanInsert() {
-	person := Person{"5678", "Doe", 58, suite.DB.Logger}
+	person := &Person{"5678", "Doe", 58, suite.DB.Logger}
 	err := suite.DB.Insert(person)
 	suite.Assert().Nil(err)
 }
@@ -57,7 +57,7 @@ func (suite *StructuredSuite) TestCanInsertAllFieldTypes() {
 		ID       string  `json:"id" sql:"key,varchar(30)"`
 		Name     string  `sql:"index"`
 		Bool     bool    `sql:"married"`
-		Age      uint    `sql:"oldtimer"`
+		Age      uint
 		Position int32   `sql:"pos"`
 		Duration float64
 	}
