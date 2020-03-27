@@ -14,7 +14,7 @@ import (
 	"github.com/gildas/go-sql"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/suite"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/proullon/ramsql/driver"
 )
 
 type DBSuite struct {
@@ -29,7 +29,7 @@ func TestDBSuite(t *testing.T) {
 }
 
 func (suite *DBSuite) TestCanOpen() {
-	db, err := sql.Open("sqlite3", "", suite.Logger)
+	db, err := sql.Open("ramsql", "", suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 	err = db.Close()
@@ -37,7 +37,7 @@ func (suite *DBSuite) TestCanOpen() {
 }
 
 func (suite *DBSuite) TestCanPing() {
-	db, err := sql.Open("sqlite3", "", suite.Logger)
+	db, err := sql.Open("ramsql", "", suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 
@@ -48,7 +48,7 @@ func (suite *DBSuite) TestCanPing() {
 }
 
 func (suite *DBSuite) TestCanStoreAndRetrieveInContext() {
-	db, err := sql.Open("sqlite3", "", suite.Logger)
+	db, err := sql.Open("ramsql", "", suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 	defer db.Close()
@@ -90,7 +90,7 @@ func dummyHandler() http.Handler {
 }
 
 func (suite *DBSuite) TestCanBePassedViaHttpHandler() {
-	db, err := sql.Open("sqlite3", "", suite.Logger)
+	db, err := sql.Open("ramsql", "", suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 	defer db.Close()
