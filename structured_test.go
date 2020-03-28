@@ -10,6 +10,7 @@ import (
 	"github.com/gildas/go-errors"
 	"github.com/gildas/go-logger"
 	"github.com/gildas/go-sql"
+	"github.com/google/uuid"
 	_ "github.com/proullon/ramsql/driver"
 	"github.com/stretchr/testify/suite"
 )
@@ -54,11 +55,11 @@ func (suite *StructuredSuite) TestCanInsert() {
 
 func (suite *StructuredSuite) TestCanInsertAllFieldTypes() {
 	type Mammoth struct {
-		ID       string  `json:"id" sql:"key,varchar(30)"`
-		Name     string  `sql:"index"`
-		Bool     bool    `sql:"married"`
+		ID       uuid.UUID `json:"id" sql:"key"`
+		Name     string    `sql:"index,varchar(60)"`
+		Bool     bool      `sql:"married"`
 		Age      uint
-		Position int32   `sql:"pos"`
+		Position int32     `sql:"pos"`
 		Duration float64
 	}
 	err := suite.DB.CreateTable(Mammoth{})
@@ -67,11 +68,19 @@ func (suite *StructuredSuite) TestCanInsertAllFieldTypes() {
 		err := suite.DB.DeleteTable(Mammoth{})
 		suite.Assert().Nil(err, "Failed to drop the table for Mammoth")
 	}()
-	mammoth := Mammoth{ID: "638146",Name: "Doe", Bool: false, Age: 58, Position: -10, Duration: 3.1415}
+	id := uuid.New()
+	mammoth := Mammoth{ID: id,Name: "Doe", Bool: false, Age: 58, Position: -10, Duration: 3.1415}
 	err = suite.DB.Insert(mammoth)
 	suite.Assert().Nil(err)
 	err = suite.DB.UpdateAll(Mammoth{}, sql.Queries{}.Add("age", 18).Add("pos", sql.QuerySet, 12))
 	suite.Assert().Nil(err)
+	found, err := suite.DB.Find(Mammoth{}, sql.Queries{}.Add("id", id))
+	suite.Assert().Nil(err)
+	animal, ok := found.(*Mammoth)
+	suite.Require().True(ok, "The found item should be a Mammoth")
+	suite.T().Logf("Mammoth: %#v", animal)
+	suite.Assert().Equal("Doe", animal.Name)
+	suite.Assert().Equal(id, animal.ID)
 }
 
 func (suite *StructuredSuite) TestCanFind() {

@@ -36,6 +36,15 @@ func (db *DB) CreateTable(schema interface{}) error {
 		} else {
 			// TODO: Add more types: uuid, time.Time, time.Duration
 			switch field.Type.Kind() {
+			case reflect.Array:
+				switch field.Type.Name() {
+				case "UUID":
+					column.WriteString("UUID")
+				default:
+					log.Warnf("Array details: %#v", field)
+					log.Errorf("Unsupported Field Type %s for %s", field.Type.Name(), field.Name)
+					return errors.ArgumentInvalid.With("typeof(" + field.Name + ")", field.Type.Name()).WithStack()
+				}
 			case reflect.Bool:
 				column.WriteString("BOOL")
 			case reflect.Float32, reflect.Float64:
@@ -47,8 +56,8 @@ func (db *DB) CreateTable(schema interface{}) error {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				column.WriteString("INT")
 			default:
-				log.Warnf("Unsupported Field Type %s for %s", field.Type.Name(), field.Name)
-				continue
+				log.Errorf("Unsupported Field Type %s for %s", field.Type.Name(), field.Name)
+				return errors.ArgumentInvalid.With("typeof(" + field.Name + ")", field.Type.Name()).WithStack()
 			}
 		}
 		if options.PrimaryKey {
@@ -100,19 +109,11 @@ func (db *DB) Insert(blob interface{}) error {
 		if len(options.ColumnName) > 0 {
 			column =options.ColumnName
 		}
-		switch field.Type.Kind() {
-		case reflect.Bool:
-			queries.Add(column, QuerySet, value.Bool())
-		case reflect.Float32, reflect.Float64:
-			queries.Add(column, QuerySet, value.Float())
-		case reflect.String:
-			queries.Add(column, QuerySet, value.String())
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			queries.Add(column, QuerySet, value.Int())
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			queries.Add(column, QuerySet, value.Uint())
-		default:
-			log.Warnf("Unsupported Field Type %s for %s", field.Type.Name(), field.Name)
+		if value.CanInterface() {
+			queries.Add(column, QuerySet, value.Interface())
+		} else {
+			log.Errorf("Unsupported Field Type %s for %s", field.Type.Name(), field.Name)
+			return errors.ArgumentInvalid.With("typeof(" + field.Name + ")", field.Type.Name()).WithStack()
 		}
 	}
 	statement, parms := InsertStatement{}.With(db).Build(table, nil, queries)

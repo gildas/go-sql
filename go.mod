@@ -8,6 +8,7 @@ require (
 	github.com/gildas/go-errors v0.1.0
 	github.com/gildas/go-logger v1.3.4
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
+	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.3
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/onsi/ginkgo v1.12.0 // indirect
