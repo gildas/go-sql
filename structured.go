@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/gildas/go-errors"
 )
@@ -34,31 +35,13 @@ func (db *DB) CreateTable(schema interface{}) error {
 		if len(options.ColumnType) > 0 {
 			column.WriteString(strings.ToUpper(options.ColumnType))
 		} else {
-			// TODO: Add more types: uuid, time.Time, time.Duration
-			switch field.Type.Kind() {
-			case reflect.Array:
-				switch field.Type.Name() {
-				case "UUID":
-					column.WriteString("UUID")
-				default:
-					log.Warnf("Array details: %#v", field)
-					log.Errorf("Unsupported Field Type %s for %s", field.Type.Name(), field.Name)
-					return errors.ArgumentInvalid.With("typeof(" + field.Name + ")", field.Type.Name()).WithStack()
-				}
-			case reflect.Bool:
-				column.WriteString("BOOL")
-			case reflect.Float32, reflect.Float64:
-				column.WriteString("FLOAT8")
-			case reflect.String:
-				column.WriteString("VARCHAR(80)")
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				column.WriteString("INT")
-			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				column.WriteString("INT")
-			default:
+			sqltype, err := getSQLType(field.Name, field.Type)
+			if err != nil {
+				log.Warnf("Array details: %#v", field)
 				log.Errorf("Unsupported Field Type %s for %s", field.Type.Name(), field.Name)
 				return errors.ArgumentInvalid.With("typeof(" + field.Name + ")", field.Type.Name()).WithStack()
 			}
+			column.WriteString(sqltype)
 		}
 		if options.PrimaryKey {
 			column.WriteString(" ")
@@ -148,7 +131,18 @@ func (db *DB) FindAll(schema interface{}, queries Queries) ([]interface{}, error
 				continue
 			}
 			log.Tracef("Field: %s, type=%s, kind=%s", field.Name, field.Type.Name(), field.Type.Kind())
-			components = append(components, blob.Elem().Field(i).Addr().Interface())
+			switch field.Type.Name() {
+			case "Time":
+				log.Debugf("Trying to get a Time field")
+				placeholder, ok := blob.Elem().Field(i).Interface().(time.Time)
+				if !ok {
+					log.Errorf("Unsupported Field %s %s (%s)", field.Name, field.Type.Name(), field.Type.Kind())
+					return results, errors.ArgumentInvalid.With("typeof(" + field.Name + ")", field.Type.Name()).WithStack()
+				}
+				components = append(components, (*DBTime)(&placeholder))
+			default:
+				components = append(components, blob.Elem().Field(i).Addr().Interface())
+			}
 		}
 		err = rows.Scan(components...)
 		if err != nil {
@@ -256,4 +250,38 @@ func getOptions(field reflect.StructField) fieldOptions {
 		}
 	}
 	return options
+}
+
+func getSQLType (name string, t reflect.Type) (string, error) {
+	// TODO: Add more types: uuid, time.Time, time.Duration
+	switch t.Kind() {
+	case reflect.Array:
+		switch t.Name() {
+		case "UUID":
+			return "UUID", nil
+		default:
+			return "", errors.ArgumentInvalid.With("typeof(" + name + ")", t.Name()).WithStack()
+		}
+	case reflect.Struct:
+		switch t.Name() {
+		case "Time":
+			return "TIMESTAMP", nil
+		default:
+			return "", errors.ArgumentInvalid.With("typeof(" + name + ")", t.Name()).WithStack()
+		}
+	case reflect.Bool:
+		return "BOOL", nil
+	case reflect.Float32, reflect.Float64:
+		return "FLOAT8", nil
+	case reflect.String:
+		return "VARCHAR(80)", nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return "INT", nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return "INT", nil
+	case reflect.Ptr:
+		return getSQLType(name, t.Elem())
+	default:
+		return "", errors.ArgumentInvalid.With("typeof(" + name + ")", t.Name()).WithStack()
+	}
 }

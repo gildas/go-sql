@@ -60,7 +60,11 @@ func (suite *StructuredSuite) TestCanInsertAllFieldTypes() {
 		Bool     bool      `sql:"married"`
 		Age      uint
 		Position int32     `sql:"pos"`
-		Duration float64
+		Distance float64
+		Day      time.Weekday
+		Duration time.Duration
+		Created  time.Time
+		Stamp    time.Time
 	}
 	err := suite.DB.CreateTable(Mammoth{})
 	suite.Require().Nil(err, "Failed to create table for Mammoth")
@@ -69,7 +73,8 @@ func (suite *StructuredSuite) TestCanInsertAllFieldTypes() {
 		suite.Assert().Nil(err, "Failed to drop the table for Mammoth")
 	}()
 	id := uuid.New()
-	mammoth := Mammoth{ID: id,Name: "Doe", Bool: false, Age: 58, Position: -10, Duration: 3.1415}
+	now := time.Now()
+	mammoth := Mammoth{id, "Doe", false, 58, -10, 3.1415, time.Tuesday, 2 * time.Minute, now, now.UTC()}
 	err = suite.DB.Insert(mammoth)
 	suite.Assert().Nil(err)
 	err = suite.DB.UpdateAll(Mammoth{}, sql.Queries{}.Add("age", 18).Add("pos", sql.QuerySet, 12))
@@ -78,7 +83,7 @@ func (suite *StructuredSuite) TestCanInsertAllFieldTypes() {
 	suite.Assert().Nil(err)
 	animal, ok := found.(*Mammoth)
 	suite.Require().True(ok, "The found item should be a Mammoth")
-	suite.T().Logf("Mammoth: %#v", animal)
+	suite.T().Logf("Mammoth: %#v, Created: %s, Stamp: %s", animal, animal.Created, animal.Stamp)
 	suite.Assert().Equal("Doe", animal.Name)
 	suite.Assert().Equal(id, animal.ID)
 }
