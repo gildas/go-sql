@@ -90,7 +90,7 @@ func (suite *DBSuite) TestCanExecAndQueryWithContext() {
 }
 
 func (suite *DBSuite) TestCanStoreAndRetrieveInContext() {
-	db, err := sql.Open("ramsql", suite.T().Name() suite.Logger)
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 	defer db.Close()
