@@ -29,7 +29,7 @@ func TestDBSuite(t *testing.T) {
 }
 
 func (suite *DBSuite) TestCanOpen() {
-	db, err := sql.Open("ramsql", "", suite.Logger)
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 	err = db.Close()
@@ -37,7 +37,7 @@ func (suite *DBSuite) TestCanOpen() {
 }
 
 func (suite *DBSuite) TestCanPing() {
-	db, err := sql.Open("ramsql", "", suite.Logger)
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 
@@ -48,7 +48,7 @@ func (suite *DBSuite) TestCanPing() {
 }
 
 func (suite *DBSuite) TestCanExecAndQuery() {
-	db, err := sql.Open("ramsql", "TEST", suite.Logger)
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 
@@ -71,7 +71,7 @@ func (suite *DBSuite) TestCanExecAndQuery() {
 }
 
 func (suite *DBSuite) TestCanExecAndQueryWithContext() {
-	db, err := sql.Open("ramsql", "TEST", suite.Logger)
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 
@@ -90,7 +90,7 @@ func (suite *DBSuite) TestCanExecAndQueryWithContext() {
 }
 
 func (suite *DBSuite) TestCanStoreAndRetrieveInContext() {
-	db, err := sql.Open("ramsql", "", suite.Logger)
+	db, err := sql.Open("ramsql", suite.T().Name() suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 	defer db.Close()
@@ -132,7 +132,7 @@ func dummyHandler() http.Handler {
 }
 
 func (suite *DBSuite) TestCanBePassedViaHttpHandler() {
-	db, err := sql.Open("ramsql", "", suite.Logger)
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
 	suite.Assert().Nil(err)
 	suite.Assert().NotNil(db)
 	defer db.Close()

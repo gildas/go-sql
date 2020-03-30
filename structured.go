@@ -92,12 +92,7 @@ func (db *DB) Insert(blob interface{}) error {
 		if len(options.ColumnName) > 0 {
 			column =options.ColumnName
 		}
-		if value.CanInterface() {
-			queries.Add(column, QuerySet, value.Interface())
-		} else {
-			log.Errorf("Unsupported Field Type %s for %s", field.Type.Name(), field.Name)
-			return errors.ArgumentInvalid.With("typeof(" + field.Name + ")", field.Type.Name()).WithStack()
-		}
+		queries.Add(column, QuerySet, value.Interface())
 	}
 	statement, parms := InsertStatement{}.With(db).Build(table, nil, queries)
 	log.Tracef("Statement: %s with %d parameters", statement, len(parms))
