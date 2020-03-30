@@ -60,10 +60,11 @@ func (suite *StructuredSuite) TestCanInsertAllFieldTypes() {
 		Bool     bool      `sql:"married"`
 		Age      uint
 		Position int32     `sql:"pos"`
+		Pointy   *int64
 		Distance float64
 		Day      time.Weekday
 		Duration time.Duration
-		Created  time.Time
+		Created  *time.Time
 		Stamp    time.Time
 	}
 	err := suite.DB.CreateTable(Mammoth{})
@@ -74,18 +75,28 @@ func (suite *StructuredSuite) TestCanInsertAllFieldTypes() {
 	}()
 	id := uuid.New()
 	now := time.Now()
-	mammoth := Mammoth{id, "Doe", false, 58, -10, 3.1415, time.Tuesday, 2 * time.Minute, now, now.UTC()}
+	pointy := int64(12)
+	mammoth := Mammoth{id, "Doe", false, 58, -10, &pointy, 3.1415, time.Tuesday, 2 * time.Minute, &now, now.UTC()}
 	err = suite.DB.Insert(mammoth)
-	suite.Assert().Nil(err)
+	suite.Require().Nil(err)
 	err = suite.DB.UpdateAll(Mammoth{}, sql.Queries{}.Add("age", 18).Add("pos", sql.QuerySet, 12))
 	suite.Assert().Nil(err)
 	found, err := suite.DB.Find(Mammoth{}, sql.Queries{}.Add("id", id))
-	suite.Assert().Nil(err)
+	suite.Require().Nil(err)
 	animal, ok := found.(*Mammoth)
 	suite.Require().True(ok, "The found item should be a Mammoth")
-	suite.T().Logf("Mammoth: %#v, Created: %s, Stamp: %s", animal, animal.Created, animal.Stamp)
-	suite.Assert().Equal("Doe", animal.Name)
+	suite.T().Logf("Mammoth: %#v", animal)
 	suite.Assert().Equal(id, animal.ID)
+	suite.Assert().Equal("Doe", animal.Name)
+	suite.Assert().Equal(false, animal.Bool)
+	suite.Assert().Equal(uint(58), animal.Age)
+	suite.Assert().Equal(int32(-10), animal.Position)
+	suite.Assert().Equal(int64(12), *animal.Pointy)
+	suite.Assert().Equal(3.1415, animal.Distance)
+	suite.Assert().Equal(time.Tuesday, animal.Day)
+	suite.Assert().Equal(2 * time.Minute, animal.Duration)
+	suite.Assert().Equal(now.Format(time.RFC3339), (*animal.Created).Format(time.RFC3339))
+	suite.Assert().Equal(now.UTC(), animal.Stamp)
 }
 
 func (suite *StructuredSuite) TestCanFind() {

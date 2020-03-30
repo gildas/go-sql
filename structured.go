@@ -131,21 +131,20 @@ func (db *DB) FindAll(schema interface{}, queries Queries) ([]interface{}, error
 				continue
 			}
 			log.Tracef("Field: %s, type=%s, kind=%s", field.Name, field.Type.Name(), field.Type.Kind())
-			switch field.Type.Name() {
-			case "Time":
-				log.Debugf("Trying to get a Time field")
-				placeholder, ok := blob.Elem().Field(i).Interface().(time.Time)
-				if !ok {
-					log.Errorf("Unsupported Field %s %s (%s)", field.Name, field.Type.Name(), field.Type.Kind())
-					return results, errors.ArgumentInvalid.With("typeof(" + field.Name + ")", field.Type.Name()).WithStack()
-				}
-				components = append(components, (*DBTime)(&placeholder))
-			default:
-				components = append(components, blob.Elem().Field(i).Addr().Interface())
+			if field.Type.Kind() == reflect.Ptr {
+				log.Tracef("Field: %s, type=%s, kind=%s", field.Name, field.Type.Elem().Name(), field.Type.Elem().Kind())
+
 			}
+			placeholder, err := getInterface(field.Name, field.Type, blob.Elem().Field(i))
+			if err != nil {
+				log.Errorf("Unsupported Field %s %s (%s)", field.Name, field.Type.Name(), field.Type.Kind())
+				return results, err
+			}
+			components = append(components, placeholder)
 		}
 		err = rows.Scan(components...)
 		if err != nil {
+			log.Errorf("Failed to scan columns", err)
 			return []interface{}{}, err
 		}
 		results = append(results, blob.Interface())
@@ -252,8 +251,7 @@ func getOptions(field reflect.StructField) fieldOptions {
 	return options
 }
 
-func getSQLType (name string, t reflect.Type) (string, error) {
-	// TODO: Add more types: uuid, time.Time, time.Duration
+func getSQLType(name string, t reflect.Type) (string, error) {
 	switch t.Kind() {
 	case reflect.Array:
 		switch t.Name() {
@@ -283,5 +281,25 @@ func getSQLType (name string, t reflect.Type) (string, error) {
 		return getSQLType(name, t.Elem())
 	default:
 		return "", errors.ArgumentInvalid.With("typeof(" + name + ")", t.Name()).WithStack()
+	}
+}
+
+func getInterface(fieldName string, fieldType reflect.Type, fieldValue reflect.Value) (interface{}, error) {
+	switch fieldType.Kind() {
+	case reflect.Ptr:
+		pvalue := reflect.New(fieldType.Elem())
+		fieldValue.Set(pvalue)
+		return getInterface(fieldName, fieldType.Elem(), fieldValue.Elem())
+	default:
+		switch fieldType.Name() {
+		case "Time":
+			placeholder, ok := fieldValue.Addr().Interface().(*time.Time)
+			if !ok {
+				return nil, errors.ArgumentInvalid.With("typeof(" + fieldName + ")", fieldType.Name()).WithStack()
+			}
+			return (*DBTime)(placeholder), nil
+		default:
+			return fieldValue.Addr().Interface(), nil
+		}
 	}
 }
