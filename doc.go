@@ -62,7 +62,29 @@ For the sake of readability, I removed the error management. DON'T!
 
 As you can see, using actual GO struct types is rather easy now. We do not support the entire set of SQL types or GO types, but we have the basics.  
 
-You can also use the Statement level of using the Database:
+We also support time.Time, `uuid.UUID` from https://pkg.go.dev/github.com/google/uuid, pointers for simple types, and foreign keys, this is how you would use these:  
+
+import "github.com/google/uuid"
+
+	type Manager struct {
+		ID   uuid.UUID `sql:"key"`
+		Name string
+	}
+
+	type TeamMember struct {
+		ID        uuid.UUID      `sql:"key"`
+		Manager   *Manager       `sql:foreign=ID"`
+		Joined    time.Time
+		Shift     time.Duration
+		WeekStart *time.Weekday
+	}
+
+Note that for the foreign keys to work,  
+- The target field must be a pointer to a struct,
+- the target `struct` must implement the database/sql Scanner (https://pkg.go.dev/database/sql?tab=doc#Scanner) interface,
+- the target `struct` key must be a uuid.UUID, string, or int (any type of int)
+
+You can also use the Statement object level of using the Database:
 
 	package main
 
