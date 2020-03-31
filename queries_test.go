@@ -30,14 +30,22 @@ func (suite *QueriesTest) TestCanCreateFromURL() {
 	u, _ := url.Parse("https://www.acme.com/api/v1/persons?age=18&name=Doe")
 	queries := sql.QueriesFromURL(u)
 	suite.Assert().NotNil(queries)
-	suite.Assert().Len(queries, 2, "There should be 2 sets of values in this Queries")
+	suite.Require().Len(queries, 2, "There should be 2 sets of values in this Queries")
+	suite.Assert().Len(queries["age"],   2, "There should be 1 value in queries[0] and 1 operator")
+	suite.Assert().Equal(sql.QueryEqual, queries["age"][0], "The operator for age should be Equal")
+	suite.Assert().Len(queries["name"],  2, "There should be 1 values in queries[0] and 1 operator")
+	suite.Assert().Equal(sql.QueryEqual, queries["name"][0], "The operator for name should be Equal")
 }
 
 func (suite *QueriesTest) TestCanCreateFromRequest() {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/persons?age=18&name=Doe", nil)
 	queries := sql.QueriesFromRequest(r)
 	suite.Assert().NotNil(queries)
-	suite.Assert().Len(queries, 2, "There should be 2 sets of values in this Queries")
+	suite.Require().Len(queries, 2, "There should be 2 sets of values in this Queries")
+	suite.Assert().Len(queries["age"],   2, "There should be 1 value in queries[0] and 1 operator")
+	suite.Assert().Equal(sql.QueryEqual, queries["age"][0], "The operator for age should be Equal")
+	suite.Assert().Len(queries["name"],  2, "There should be 1 values in queries[0] and 1 operator")
+	suite.Assert().Equal(sql.QueryEqual, queries["name"][0], "The operator for name should be Equal")
 }
 
 func (suite *QueriesTest) TestCanAddValues() {
