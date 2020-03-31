@@ -22,10 +22,11 @@ func QueriesFromRequest(r *http.Request) Queries {
 func QueriesFromURL(u *url.URL) Queries {
 	queries := Queries{}
 	for key, values := range u.Query() {
-		queries[key] = make([]interface{}, len(values))
+		qvalues := make([]interface{}, len(values))
 		for i, value := range values {
-			queries[key][i] = value
+			qvalues[i] = value
 		}
+		queries.Add(key, qvalues...)
 	}
 	return queries
 }
