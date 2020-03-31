@@ -3,13 +3,19 @@
 This file contains changes throughout the life of this project.
 
 ### Development
-[Full Changelog](https://github.com/gildas/fluent-plugin-bunyan/compare/v0.0.2...dev)
+[Full Changelog](https://github.com/gildas/fluent-plugin-bunyan/compare/v0.0.3...dev)
 
 New Features:
 * None Yet
 
 Bug Fixes:  
 * None Yet
+
+### 0.0.3 / 2020-03-31
+[Full Changelog](https://github.com/gildas/fluent-plugin-bunyan/compare/v0.0.2...v0.0.3)
+
+Bug Fixes:  
+* Queries were not built properly from HTTP Requests or url queries
 
 ### 0.0.2 / 2020-03-31
 [Full Changelog](https://github.com/gildas/fluent-plugin-bunyan/compare/v0.0.1...v0.0.2)
