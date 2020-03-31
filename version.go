@@ -4,4 +4,4 @@ package sql
 var commit string
 
 // VERSION is the version of this application
-var VERSION = "0.0.2" + commit
+var VERSION = "0.0.3" + commit
