@@ -31,15 +31,62 @@ func (db *DB) CreateTable(schema interface{}) error {
 		} else {
 			column.WriteString(strings.ToLower(field.Name))
 		}
+		if len(options.ForeignKey) > 0 {
+			column.WriteString("_")
+			column.WriteString(strings.ToLower(options.ForeignKey))
+		}
 		column.WriteString(" ")
-		if len(options.ColumnType) > 0 {
+		if len(options.ForeignKey) > 0 {
+			log.Debugf("Field should use a foreign key: %s", options.ForeignKey)
+			foreignType := field.Type
+			if foreignType.Kind() == reflect.Ptr {
+				foreignType = foreignType.Elem()
+			}
+			if foreignType.Kind() != reflect.Struct {
+				return errors.ArgumentInvalid.With("typeof", field.Name).WithStack()
+			}
+			var sqltype string
+			for j := 0; j < foreignType.NumField(); j++ {
+				subfield := foreignType.Field(j)
+				if subfield.Name == options.ForeignKey {
+					log.Debugf("SubField: %s, type=%s, kind=%s", subfield.Name, subfield.Type.Name(), subfield.Type.Kind())
+					if len(options.ColumnType) > 0 {
+						sqltype = strings.ToUpper(options.ColumnType)
+					} else {
+						switch subfield.Type.Kind() {
+						case reflect.Array, reflect.Slice:
+							switch subfield.Type.Name() {
+							case "UUID":
+								sqltype = "UUID"
+							default:
+								return errors.ArgumentInvalid.With("typeof", subfield.Name).WithStack()
+							}
+						case reflect.String:
+							sqltype = "VARCHAR(80)"
+						case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+							sqltype = "INT"
+						default:
+							log.Errorf("Unsupported Kind: %s", subfield.Type.Kind())
+							return errors.ArgumentInvalid.With("typeof", subfield.Name).WithStack()
+						}
+					}
+					log.Debugf("Matched? with %s", sqltype)
+					break
+				}
+			}
+			log.Debugf("Foreign Type: %s, kind=%s => %s", foreignType.Name(), foreignType.Kind(), sqltype)
+			if len(sqltype) == 0 {
+				return errors.ArgumentInvalid.With("foreignkey", options.ForeignKey).WithStack()
+			}
+			column.WriteString(sqltype)
+		} else if len(options.ColumnType) > 0 {
 			column.WriteString(strings.ToUpper(options.ColumnType))
 		} else {
 			sqltype, err := getSQLType(field.Name, field.Type)
 			if err != nil {
-				log.Warnf("Array details: %#v", field)
-				log.Errorf("Unsupported Field Type %s for %s", field.Type.Name(), field.Name)
-				return errors.ArgumentInvalid.With("typeof(" + field.Name + ")", field.Type.Name()).WithStack()
+				log.Warnf("Field details: %#v", field)
+				log.Errorf("Unsupported Field Type %s (%s) for %s", field.Type.Name(), field.Type.Kind(), field.Name)
+				return err
 			}
 			column.WriteString(sqltype)
 		}
@@ -90,8 +137,35 @@ func (db *DB) Insert(blob interface{}) error {
 		value := blobValue.Field(i)
 		column := strings.ToLower(field.Name)
 		if len(options.ColumnName) > 0 {
-			column =options.ColumnName
+			column = options.ColumnName
 		}
+		if len(options.ForeignKey) > 0 {
+			column = column + "_" + strings.ToLower(options.ForeignKey)
+			foreignType := field.Type
+			foreignValue := value
+			log.Debugf("Foreign Value: %#v", foreignValue)
+			if foreignType.Kind() == reflect.Ptr {
+				foreignType = foreignType.Elem()
+				foreignValue = value.Elem()
+			}
+			if foreignType.Kind() != reflect.Struct {
+				return errors.ArgumentInvalid.With("typeof", field.Name).WithStack()
+			}
+			found := false
+			for j := 0; j < foreignType.NumField(); j++ {
+				subfield := foreignType.Field(j)
+				if subfield.Name == options.ForeignKey {
+					log.Tracef("SubField: %s, type=%s, kind=%s", subfield.Name, subfield.Type.Name(), subfield.Type.Kind())
+					found = true
+					value = foreignValue.Field(j)
+					break
+				}
+			}
+			if !found {
+				return errors.ArgumentInvalid.With("foreignkey", options.ForeignKey).WithStack()
+			}
+		}
+		log.Debugf("Adding value: %#v", value)
 		queries.Add(column, QuerySet, value.Interface())
 	}
 	statement, parms := InsertStatement{}.With(db).Build(table, nil, queries)
@@ -132,7 +206,6 @@ func (db *DB) FindAll(schema interface{}, queries Queries) ([]interface{}, error
 			}
 			placeholder, err := getInterface(field.Name, field.Type, blob.Elem().Field(i))
 			if err != nil {
-				log.Errorf("Unsupported Field %s %s (%s)", field.Name, field.Type.Name(), field.Type.Kind())
 				return results, err
 			}
 			components = append(components, placeholder)
@@ -207,11 +280,15 @@ func getColumns(schemaType reflect.Type) []string {
 		if options.Ignore {
 			continue
 		}
+		column := strings.ToLower(field.Name)
 		if len(options.ColumnName) > 0 {
-			columns = append(columns, options.ColumnName)
-		} else {
-			columns = append(columns, strings.ToLower(field.Name))
+			column = options.ColumnName
 		}
+		if len(options.ForeignKey) > 0 {
+			column = column + "_" + strings.ToLower(options.ForeignKey)
+
+		}
+		columns = append(columns, column)
 	}
 	return columns
 }
@@ -222,24 +299,29 @@ type fieldOptions struct {
 	Ignore     bool
 	ColumnName string
 	ColumnType string
+	ForeignKey string
 }
 
 func getOptions(field reflect.StructField) fieldOptions {
 	options := fieldOptions{Ignore: false}
 	for i, option := range strings.Split(field.Tag.Get("sql"), ",") {
 		name := strings.ToLower(strings.TrimSpace(option)) 
-		switch name {
-		case "index":
-			options.Index = true
-		case "key":
-			options.PrimaryKey = true
-		case "-":
-			options.Ignore = true
-		default:
-			if i == 0 {
-				options.ColumnName = name
-			} else {
-				options.ColumnType = name
+		if strings.HasPrefix(name, "foreign=") {
+			options.ForeignKey = strings.TrimSpace(strings.Split(option, "=")[1])
+		} else {
+			switch name {
+			case "index":
+				options.Index = true
+			case "key":
+				options.PrimaryKey = true
+			case "-":
+				options.Ignore = true
+			default:
+				if i == 0 {
+					options.ColumnName = name
+				} else {
+					options.ColumnType = name
+				}
 			}
 		}
 	}
@@ -248,19 +330,19 @@ func getOptions(field reflect.StructField) fieldOptions {
 
 func getSQLType(name string, t reflect.Type) (string, error) {
 	switch t.Kind() {
-	case reflect.Array:
+	case reflect.Array, reflect.Slice:
 		switch t.Name() {
 		case "UUID":
 			return "UUID", nil
 		default:
-			return "", errors.ArgumentInvalid.With("typeof(" + name + ")", t.Name()).WithStack()
+			return "", errors.ArgumentInvalid.With("typeof", name).WithStack()
 		}
 	case reflect.Struct:
 		switch t.Name() {
 		case "Time":
 			return "TIMESTAMP", nil
 		default:
-			return "", errors.ArgumentInvalid.With("typeof(" + name + ")", t.Name()).WithStack()
+			return "", errors.ArgumentInvalid.With("typeof", name).WithStack()
 		}
 	case reflect.Bool:
 		return "BOOL", nil
@@ -275,7 +357,7 @@ func getSQLType(name string, t reflect.Type) (string, error) {
 	case reflect.Ptr:
 		return getSQLType(name, t.Elem())
 	default:
-		return "", errors.ArgumentInvalid.With("typeof(" + name + ")", t.Name()).WithStack()
+		return "", errors.ArgumentInvalid.With("typeof", name).WithStack()
 	}
 }
 
@@ -290,7 +372,7 @@ func getInterface(fieldName string, fieldType reflect.Type, fieldValue reflect.V
 		case "Time":
 			placeholder, ok := fieldValue.Addr().Interface().(*time.Time)
 			if !ok {
-				return nil, errors.ArgumentInvalid.With("typeof(" + fieldName + ")", fieldType.Name()).WithStack()
+				return nil, errors.ArgumentInvalid.With("typeof", fieldName).WithStack()
 			}
 			return (*DBTime)(placeholder), nil
 		default:

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gildas/go-core"
 	"github.com/gildas/go-errors"
 	"github.com/gildas/go-logger"
 	"github.com/gildas/go-sql"
@@ -27,6 +28,27 @@ type Person struct {
 	Name   string         `json:"name" sql:"index"`
 	Age    int            `json:"age"`
 	Logger *logger.Logger `json:"-"    sql:"-"`
+}
+
+type Manager struct {
+	ID       uuid.UUID      `json:"id" sql:"key"`
+	Name     string         `          sql:"index,varchar(60)"`
+	Logger   *logger.Logger `json:"-"  sql:"-"`
+}
+type Employee struct {
+	ID       uuid.UUID      `json:"id" sql:"key"`
+	Name     string         `          sql:"index,varchar(60)"`
+	Manager  *Manager      `json:"-"  sql:"foreign=ID"`
+	Logger   *logger.Logger `json:"-"  sql:"-"`
+}
+
+func (manager *Manager) Scan(blob interface{}) (err error) {
+	payload, ok := blob.([]byte)
+	if !ok {
+		return errors.ArgumentInvalid.With("blob", "[]byte").WithStack()
+	}
+	manager.ID, err = uuid.ParseBytes(payload)
+	return errors.ArgumentInvalid.With("blob[uuid]", "[]byte").Wrap(err)
 }
 
 func TestStructuredSuite(t *testing.T) {
@@ -189,12 +211,105 @@ func (suite *StructuredSuite) TestCanDelete() {
 	suite.Assert().Nil(err)
 }
 
+func (suite *StructuredSuite) TestCanCreateTableWithForeignKey() {
+	type Stuff1 struct {
+		ID       string `json:"id" sql:"key"`
+		Name     string `          sql:"index,varchar(60)"`
+	}
+	type Stuff2 struct {
+		ID       int    `json:"id" sql:"key"`
+		Name     string `          sql:"index,varchar(60)"`
+	}
+	type Employee struct {
+		ID       uuid.UUID `json:"id" sql:"key"`
+		Name     string    `          sql:"index,varchar(60)"`
+		Employee *Employee `json:"-"  sql:"foreign=ID"`
+		Stuff1   *Stuff1   `jaon:"-"  sql:"foreign=ID"`
+		Stuff2   *Stuff2   `jaon:"-"  sql:"foreign=ID"`
+	}
+
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	err = db.CreateTable(Employee{})
+	suite.Require().Nil(err, "Failed to create table for Employee")
+}
+
+func (suite *StructuredSuite) TestCanCreateTableWithForeignKeyAndType() {
+	type Employee struct {
+		ID       uuid.UUID `json:"id" sql:"key"`
+		Name     string    `          sql:"index,varchar(60)"`
+		Employee *Employee `json:"-"  sql:"foreign=ID,char(32)"`
+	}
+
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	err = db.CreateTable(Employee{})
+	suite.Require().Nil(err, "Failed to create table for Employee")
+}
+
+func (suite *StructuredSuite) TestCanUseForeignKeys() {
+	manager := &Manager{uuid.New(), "Joe", suite.Logger}
+	employee := &Employee{uuid.New(), "John", manager, suite.Logger}
+
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	err = db.CreateTable(Manager{})
+	suite.Require().Nil(err, "Failed to create table for Manager")
+	err = db.CreateTable(Employee{})
+	suite.Require().Nil(err, "Failed to create table for Employee")
+
+	err = db.Insert(manager)
+	suite.Require().Nil(err, "Failed to Insert the Manager")
+
+	err = db.Insert(employee)
+	suite.Require().Nil(err, "Failed to Insert the Employee")
+
+	found, err := db.Find(Employee{}, sql.Queries{}.Add("id", employee.ID))
+	suite.Require().Nil(err)
+	p, ok := found.(*Employee)
+	suite.Require().True(ok, "The found item should be an Employee")
+	suite.T().Logf("Employee: %#v", p)
+	suite.Assert().Equal(employee.ID, p.ID)
+	suite.Assert().Equal(employee.Name, p.Name)
+	suite.Require().NotNil(p.Manager)
+	suite.Assert().Equal(manager.ID, p.Manager.ID)
+
+	found, err = db.Find(Manager{}, sql.Queries{}.Add("id", manager.ID))
+	suite.Require().Nil(err)
+	m, ok := found.(*Manager)
+	suite.Require().True(ok, "The found item should be an Employee")
+	suite.T().Logf("Manager: %#v", m)
+	suite.Assert().Equal(manager.ID, m.ID)
+	suite.Assert().Equal(manager.Name, m.Name)
+	//suite.Require().Nil(m.Manager)
+}
+
 func (suite *StructuredSuite) TestShouldNotCreateWithUnsupportedFields() {
-	type Impossible struct {
+	type Impossible1 struct {
 		ID    string
 		NoWay struct {
 			NotHere string
 		}
+	}
+	type Impossible2 struct {
+		ID      string
+		Imagine complex64
+	}
+	type Impossible3 struct {
+		ID      string
+		Stuff   []int
 	}
 	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
 	suite.Require().Nil(err, "Failed to open Database")
@@ -205,8 +320,30 @@ func (suite *StructuredSuite) TestShouldNotCreateWithUnsupportedFields() {
 	err = db.CreateTable(Person{})
 	suite.Require().Nil(err, "Failed to create table")
 	suite.Require().Nil(db.Insert(Person{"1234", "Doe", 18, db.Logger}))
-	err = db.CreateTable(Impossible{})
-	suite.Require().NotNil(err, "Failed to create table for Impossible")
+	err = db.CreateTable(Impossible1{})
+	suite.Require().NotNil(err, "Failed to create table for Impossible1")
+	suite.Logger.Errorf("Expected Error", err)
+	suite.Assert().Truef(errors.Is(err, errors.ArgumentInvalid), "Error should be an ArgumentInvalid, was: %s", err)
+	var details *errors.Error
+	suite.Require().True(errors.As(err, &details), "Error should be an error.Error")
+	suite.Assert().Equal("typeof", details.What)
+	suite.Assert().Equal("NoWay", details.Value.(string))
+
+	err = db.CreateTable(Impossible2{})
+	suite.Require().NotNil(err, "Failed to create table for Impossible2")
+	suite.Logger.Errorf("Expected Error", err)
+	suite.Assert().Truef(errors.Is(err, errors.ArgumentInvalid), "Error should be an ArgumentInvalid, was: %s", err)
+	suite.Require().True(errors.As(err, &details), "Error should be an error.Error")
+	suite.Assert().Equal("typeof", details.What)
+	suite.Assert().Equal("Imagine", details.Value.(string))
+
+	err = db.CreateTable(Impossible3{})
+	suite.Require().NotNil(err, "Failed to create table for Impossible3")
+	suite.Logger.Errorf("Expected Error", err)
+	suite.Assert().Truef(errors.Is(err, errors.ArgumentInvalid), "Error should be an ArgumentInvalid, was: %s", err)
+	suite.Require().True(errors.As(err, &details), "Error should be an error.Error")
+	suite.Assert().Equal("typeof", details.What)
+	suite.Assert().Equal("Stuff", details.Value.(string))
 }
 
 func (suite *StructuredSuite) TestShouldNotFindWithUnknownSchema() {
@@ -223,8 +360,36 @@ func (suite *StructuredSuite) TestShouldNotFindWithUnknownSchema() {
 	suite.Require().Nil(err, "Failed to create table")
 	suite.Require().Nil(db.Insert(Person{"1234", "Doe", 18, db.Logger}))
 	_, err = db.FindAll(Parasite{}, sql.Queries{})
-	suite.Assert().NotNil(err)
-	suite.Logger.Errorf("(Expected) Failed to find any item", err)
+	suite.Require().NotNil(err)
+	suite.Logger.Errorf("Expected Error", err)
+}
+
+func (suite *StructuredSuite) TestShouldNotQueryUnsupportedFields() {
+	type Employee struct {
+		ID       string         `json:"id" sql:"key"`
+		Name     string         `          sql:"index,varchar(60)"`
+		Stamp    core.Time
+		Logger   *logger.Logger `json:"-"  sql:"-"`
+	}
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	suite.Logger.Infof("Creating test Table")
+	_, err = db.Exec(`CREATE TABLE employee (id UUID, name TEXT, stamp TIMESTAMP)`)
+	suite.Assert().Nil(err, "Failed to execute statement: create table")
+	_, err = db.Exec(`INSERT INTO employee (id, name) VALUES ('1234', 'Doe')`)
+	suite.Assert().Nil(err, "Failed to execute statement: insert")
+	_, err = db.Find(Employee{}, sql.Queries{}.Add("name", "Doe"))
+	suite.Require().NotNil(err, "Should not Query the Employee")
+	suite.Logger.Errorf("Expected Error", err)
+	suite.Assert().Truef(errors.Is(err, errors.ArgumentInvalid), "Error should be an ArgumentInvalid, was: %s", err)
+	var details *errors.Error
+	suite.Require().True(errors.As(err, &details), "Error should be an error.Error")
+	suite.Assert().Equal("typeof", details.What)
+	suite.Assert().Equal("Stamp", details.Value.(string))
 }
 
 func (suite *StructuredSuite) TestShouldNotRetrieveWrongData() {
@@ -253,13 +418,9 @@ func (suite *StructuredSuite) TestShouldNotRetrieveWrongData() {
 	_, err = db.Exec(statement, parms...)
 	suite.Assert().Nil(err, "Failed to insert data manually")
 
-	_, err = db.FindAll(BadType{}, sql.Queries{}.Add("id", "1234"))
-	suite.Assert().NotNil(err)
-	suite.Logger.Errorf("(Expected) Failed to find any item", err)
-
 	_, err = db.Find(BadType{}, sql.Queries{}.Add("id", "1234"))
-	suite.Assert().NotNil(err)
-	suite.Logger.Errorf("(Expected) Failed to find any item", err)
+	suite.Require().NotNil(err)
+	suite.Logger.Errorf("Expected Error", err)
 }
 
 func (suite *StructuredSuite) TestShouldNotInsertUnsupportedTypes() {
@@ -289,8 +450,8 @@ func (suite *StructuredSuite) TestShouldNotInsertUnsupportedTypes() {
 	suite.Assert().Nil(err, "Failed to execute statement")
 	badtype := Test{"638146", complex64(1)}
 	err = db.Insert(badtype)
-	suite.Assert().NotNil(err)
-	suite.T().Logf("Expected Insert error: %s", err.Error())
+	suite.Require().NotNil(err)
+	suite.Logger.Errorf("Expected Error", err)
 }
 
 func (suite *StructuredSuite) TestShouldNotFindUnknownData() {
@@ -304,8 +465,39 @@ func (suite *StructuredSuite) TestShouldNotFindUnknownData() {
 	suite.Require().Nil(err, "Failed to create table")
 	suite.Require().Nil(db.Insert(Person{"1234", "Doe", 18, db.Logger}))
 	_, err = db.Find(Person{}, sql.Queries{}.Add("id", "nothere"))
-	suite.Assert().NotNil(err)
+	suite.Require().NotNil(err)
+	suite.Logger.Errorf("Expected Error", err)
 	suite.Assert().True(errors.Is(err, errors.NotFound), "The error should be NotFound")
+}
+
+func (suite *StructuredSuite) TestShouldNotQueryWithUnsupportedTypes() {
+	type Test struct {
+		ID      string `json:"id" sql:"key,varchar(30)"`
+		BadType complex64
+	}
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	err = db.CreateTable(Person{})
+	suite.Require().Nil(err, "Failed to create table")
+	suite.Require().Nil(db.Insert(Person{"1234", "Doe", 18, db.Logger}))
+	suite.Logger.Infof("Creating test Table")
+	_, err = db.Exec(`CREATE TABLE test (id TEXT, badtype INT)`)
+	suite.Assert().Nil(err, "Failed to execute statement")
+	// No need to delete this table with ramsql, it will be dropped when AfterTest disconnects from the DB
+	// Plus, there is a deadlock in ramsql, sometimes when a statement fails, the next statement locks on its mutex
+	//defer func() {
+	//	db.Exec("DROP TABLE test")
+	//}()
+	suite.Logger.Infof("Inserting data into the test Table")
+	_, err = db.Exec(`INSERT INTO test (id, badtype) VALUES ($1, $2)`, "1234", 12)
+	suite.Assert().Nil(err, "Failed to execute statement")
+	_, err = db.Find(Test{}, sql.Queries{}.Add("id", "1234"))
+	suite.Require().NotNil(err)
+	suite.Logger.Errorf("Expected Error", err)
 }
 
 func (suite *StructuredSuite) TestScannerShouldComplainWithInvalidData() {
@@ -313,7 +505,175 @@ func (suite *StructuredSuite) TestScannerShouldComplainWithInvalidData() {
 	payload := []byte(now.Format(time.RFC822))
 	scanner := &sql.DBTime{}
 	err := scanner.Scan(payload)
-	suite.Assert().NotNil(err)
+	suite.Require().NotNil(err)
+	suite.Logger.Errorf("Expected Error", err)
+	suite.Assert().Truef(errors.Is(err, errors.Unsupported), "Error should be an Unsupported, was: %s", err)
+	var details *errors.Error
+	suite.Require().True(errors.As(err, &details), "Error should be an error.Error")
+	suite.Assert().Equal("time", details.What)
+	suite.Assert().Equal(string(payload), details.Value.(string))
+}
+
+func (suite *StructuredSuite) TestShouldNotCreateWithInvalidForeignKey() {
+	type Employee struct {
+		ID       uuid.UUID      `json:"id" sql:"key"`
+		Name     string         `          sql:"index,varchar(60)"`
+		Manager  *Employee      `json:"-"  sql:"foreign=WrongID"`
+		Logger   *logger.Logger `json:"-"  sql:"-"`
+	}
+	manager := &Employee{uuid.New(), "Joe", nil, suite.Logger}
+	employee := &Employee{uuid.New(), "John", manager, suite.Logger}
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	err = db.CreateTable(Employee{})
+	suite.Assert().NotNil(err, "Should not create table for Employee")
+	err = db.Insert(employee)
+	suite.Require().NotNil(err, "Should not Insert the Employee")
+	suite.Logger.Errorf("Expected Error", err)
+	suite.Assert().Truef(errors.Is(err, errors.ArgumentInvalid), "Error should be an ArgumentInvalid, was: %s", err)
+	var details *errors.Error
+	suite.Require().True(errors.As(err, &details), "Error should be an error.Error")
+	suite.Assert().Equal("foreignkey", details.What)
+	suite.Assert().Equal("WrongID", details.Value.(string))
+}
+
+func (suite *StructuredSuite) TestShouldNotCreateWithInvalidTypeForForeignKey() {
+	type Employee struct {
+		ID       uuid.UUID      `json:"id" sql:"key"`
+		Name     string         `          sql:"index,varchar(60)"`
+		Manager  string         `json:"-"  sql:"foreign=ID"`
+		Logger   *logger.Logger `json:"-"  sql:"-"`
+	}
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	err = db.CreateTable(Employee{})
+	suite.Require().NotNil(err, "Should not create table for Employee")
+	suite.Logger.Errorf("Expected Error", err)
+}
+
+func (suite *StructuredSuite) TestShouldNotCreateWithInvalidKeyTypeForForeignKey() {
+	type Stuff struct {
+		ID    []int   `json:"id" sql:"key"`
+		Price float64 `json:"price"`
+		Count int     `json:"count"`
+	}
+	type Employee struct {
+		ID       uuid.UUID      `json:"id" sql:"key"`
+		Name     string         `          sql:"index,varchar(60)"`
+		Stuff    *Stuff         `json:"-"  sql:"foreign=ID"`
+		Logger   *logger.Logger `json:"-"  sql:"-"`
+	}
+	type Officer struct {
+		ID       uuid.UUID      `json:"id" sql:"key"`
+		Name     string         `          sql:"index,varchar(60)"`
+		Stuff    *Stuff         `json:"-"  sql:"foreign=Price"`
+		Logger   *logger.Logger `json:"-"  sql:"-"`
+	}
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	err = db.CreateTable(Employee{})
+	suite.Require().NotNil(err, "Should not create table for Employee")
+	suite.Assert().Truef(errors.Is(err, errors.ArgumentInvalid), "Error should be an ArgumentInvalid, was: %s", err)
+	var details *errors.Error
+	suite.Require().True(errors.As(err, &details), "Error should be an error.Error")
+	suite.Assert().Equal("typeof", details.What)
+	suite.Assert().Equal("ID", details.Value.(string))
+
+	err = db.CreateTable(Officer{})
+	suite.Require().NotNil(err, "Should not create table for Officer")
+	suite.Logger.Errorf("Expected Error", err)
+	suite.Assert().Truef(errors.Is(err, errors.ArgumentInvalid), "Error should be an ArgumentInvalid, was: %s", err)
+	suite.Require().True(errors.As(err, &details), "Error should be an error.Error")
+	suite.Assert().Equal("typeof", details.What)
+	suite.Assert().Equal("Price", details.Value.(string))
+}
+
+func (suite *StructuredSuite) TestShouldNotInsertWithInvalidForeignKey() {
+	type Employee struct {
+		ID       uuid.UUID      `json:"id" sql:"key"`
+		Name     string         `          sql:"index,varchar(60)"`
+		Manager  *Employee      `json:"-"  sql:"foreign=WrongID"`
+		Logger   *logger.Logger `json:"-"  sql:"-"`
+	}
+	manager := &Employee{uuid.New(), "Joe", nil, suite.Logger}
+	employee := &Employee{uuid.New(), "John", manager, suite.Logger}
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	suite.Logger.Infof("Creating test Table")
+	_, err = db.Exec(`CREATE TABLE employee (id UUID, name TEXT, manager_id UUID)`)
+	suite.Assert().Nil(err, "Failed to execute statement: create table")
+	err = db.Insert(employee)
+	suite.Require().NotNil(err, "Should not Insert the Employee")
+	suite.Logger.Errorf("Expected Error", err)
+	suite.Assert().Truef(errors.Is(err, errors.ArgumentInvalid), "Error should be an ArgumentInvalid, was: %s", err)
+	var details *errors.Error
+	suite.Require().True(errors.As(err, &details), "Error should be an error.Error")
+	suite.Assert().Equal("foreignkey", details.What)
+	suite.Assert().Equal("WrongID", details.Value.(string))
+}
+
+func (suite *StructuredSuite) TestShouldNotInsertWithInvalidTypeForForeignKey() {
+	type Employee struct {
+		ID       uuid.UUID      `json:"id" sql:"key"`
+		Name     string         `          sql:"index,varchar(60)"`
+		Manager  string         `json:"-"  sql:"foreign=ID"`
+		Logger   *logger.Logger `json:"-"  sql:"-"`
+	}
+	employee := &Employee{uuid.New(), "John", "manager", suite.Logger}
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	suite.Logger.Infof("Creating test Table")
+	_, err = db.Exec(`CREATE TABLE employee (id UUID, name TEXT, manager_id UUID)`)
+	suite.Assert().Nil(err, "Failed to execute statement: create table")
+	err = db.Insert(employee)
+	suite.Require().NotNil(err, "Should not Insert the Employee")
+	suite.Logger.Errorf("Expected Error", err)
+	suite.Assert().Truef(errors.Is(err, errors.ArgumentInvalid), "Error should be an ArgumentInvalid, was: %s", err)
+	var details *errors.Error
+	suite.Require().True(errors.As(err, &details), "Error should be an error.Error")
+	suite.Assert().Equal("typeof", details.What)
+	suite.Assert().Equal("Manager", details.Value.(string))
+}
+
+func (suite *StructuredSuite) TestShouldNotQueryWithInvalidForeignKey() {
+	type Employee struct {
+		ID       uuid.UUID      `json:"id" sql:"key"`
+		Name     string         `          sql:"index,varchar(60)"`
+		Manager  *Employee      `json:"-"  sql:"foreign=WrongID"`
+		Logger   *logger.Logger `json:"-"  sql:"-"`
+	}
+	db, err := sql.Open("ramsql", suite.T().Name(), suite.Logger)
+	suite.Require().Nil(err, "Failed to open Database")
+	defer func () {
+		err := db.Close()
+		suite.Assert().Nil(err, "Failed to close the database")
+	}()
+	suite.Logger.Infof("Creating test Table")
+	_, err = db.Exec(`CREATE TABLE employee (id UUID, name TEXT, manager_id UUID)`)
+	suite.Assert().Nil(err, "Failed to execute statement: create table")
+	_, err = db.Find(Employee{}, sql.Queries{}.Add("name", "Doe"))
+	suite.Require().NotNil(err, "Should not Query the Employee")
+	suite.Logger.Errorf("Expected Error", err)
 }
 
 // Suite Tools

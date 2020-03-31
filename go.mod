@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	cloud.google.com/go v0.55.0 // indirect
-	github.com/gildas/go-core v0.4.2 // indirect
+	github.com/gildas/go-core v0.4.2
 	github.com/gildas/go-errors v0.1.0
 	github.com/gildas/go-logger v1.3.4
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
