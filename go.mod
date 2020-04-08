@@ -3,8 +3,8 @@ module github.com/gildas/go-sql
 go 1.14
 
 require (
-	cloud.google.com/go v0.55.0 // indirect
-	github.com/gildas/go-core v0.4.2
+	cloud.google.com/go v0.56.0 // indirect
+	github.com/gildas/go-core v0.4.3
 	github.com/gildas/go-errors v0.1.0
 	github.com/gildas/go-logger v1.3.4
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
@@ -18,8 +18,8 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/ziutek/mymysql v1.5.4 // indirect
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e // indirect
-	golang.org/x/sys v0.0.0-20200327173247-9dae0f8f5775 // indirect
-	google.golang.org/genproto v0.0.0-20200326112834-f447254575fd // indirect
+	golang.org/x/sys v0.0.0-20200406155108-e3b113bbe6a4 // indirect
+	google.golang.org/api v0.21.0 // indirect
+	google.golang.org/genproto v0.0.0-20200407120235-9eb9bb161a06 // indirect
+	google.golang.org/grpc v1.28.1 // indirect
 )
-
-replace github.com/gildas/ramsql => ../ramsql
